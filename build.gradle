@@ -33,7 +33,7 @@ sourceSets {
 }
 
 shadowJar() {
-    archiveName = 'kotlinStrategy.jar'
+    archiveName = "kotlinStrategy-${version}.jar"
     mergeServiceFiles()
     manifest {
         attributes 'Main-Class': 'MainKt'
