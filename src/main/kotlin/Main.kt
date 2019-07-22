@@ -4,17 +4,12 @@ import java.io.File
 import java.lang.IllegalArgumentException
 import java.util.*
 import kotlin.collections.ArrayList
-
-fun getRandom(commands: Array<String>): String {
-    val rnd = Random().nextInt(commands.size)
-    return commands[rnd]
-}
+import kotlin.math.abs
 
 val f = File("test1")
 
 fun main(args: Array<String>) {
     try {
-        val commands = arrayOf("left", "right", "up", "down")
         f.appendText("1\n")
 
         val firstInput = readLine()
@@ -23,14 +18,17 @@ fun main(args: Array<String>) {
         val config = WorldConfig.build(JSONObject(firstInput)) ?: throw IllegalArgumentException(firstInput)
         f.appendText(config.toString() + "\n")
 
+        val strategy = SimpleStrategy(config)
+
         while (true) {
             val input = readLine() ?: return
 
             f.appendText("$input\n")
-            val tickData = TickData.build(input)
+            val tickData = TickData.build(input) ?: return
             f.appendText("$tickData\n")
+            strategy.onNewTick(tickData)
 
-            val command = getRandom(commands)
+            val command = strategy.getCommand()
             println("{\"command\": \"$command\"}")
             f.appendText("$command\n")
         }
@@ -39,6 +37,110 @@ fun main(args: Array<String>) {
         e.printStackTrace()
     }
 }
+
+class SimpleStrategy(val config: WorldConfig) {
+
+    private val commands = arrayOf("left", "right", "up", "down")
+
+    lateinit var currentTick: TickData
+    private var lastKnownDirection: Direction = Direction.up
+    private var goHomeRequired = false
+
+    fun onNewTick(tickData: TickData) {
+        this.currentTick = tickData
+    }
+
+    private fun getNearestMyTerritoryPoint(): NearestVertex {
+        var min = 1000000
+        var target = Vertex(0, 0)
+        currentTick.me.territory.vertexes.forEach {
+            val test = abs(currentTick.me.position.x - it.x) + abs(currentTick.me.position.y - it.y)
+            if (test < min) {
+                min = test
+                target = it
+            }
+        }
+
+        val dir = if (abs(currentTick.me.position.x - target.x) > abs(currentTick.me.position.y - target.y)) {
+            if (currentTick.me.position.x > target.x)
+                Direction.down
+            Direction.up
+        } else {
+            if (currentTick.me.position.y > target.y)
+                Direction.left
+            Direction.right
+        }
+
+        return NearestVertex(target, -1, dir)
+    }
+
+
+    fun getCommand(): String {
+        return if (currentTick.tickNum == 1)
+            getRandom(commands.copyOfRange(0, 1))
+        else
+            getNextTurn()
+    }
+
+    private fun getNextTurn(): String {
+        if (goHomeRequired) {
+            val nearest = getNearestMyTerritoryPoint()
+            if (!lastKnownDirection.isOppositeTo(nearest.direction)) {
+                lastKnownDirection = nearest.direction
+
+                return lastKnownDirection.toString()
+            }
+        }
+
+        val dir = getNearestBorderDirection()
+        if (dir.steps > 1) {
+            goHomeRequired = false
+            if (!lastKnownDirection.isOppositeTo(dir.direction)) {
+                lastKnownDirection = dir.direction
+
+                return lastKnownDirection.toString()
+            }
+        }
+
+        return if (lastKnownDirection == Direction.up || lastKnownDirection == Direction.down) {
+            goHomeRequired = true
+            getRandom(commands.copyOfRange(0, 1))
+        } else {
+            goHomeRequired = true
+            getRandom(commands.copyOfRange(2, 3))
+        }
+
+    }
+
+    private fun getNearestBorderDirection(): NearestVertex {
+        with(currentTick.me.position) {
+            if (x >= y) {
+                if (x > config.yCellsCount * config.squareWith - y) {
+                    return NearestVertex(
+                            Vertex(x, config.yCellsCount * config.squareWith),
+                            (config.yCellsCount *
+                                    config.squareWith - y) / config.defaultSpeed,
+                            Direction.up)
+                }
+                return NearestVertex(Vertex(0, y), x / config.defaultSpeed, Direction.left)
+            } else {
+                if (config.xCellsCount * config.squareWith - x > y) {
+                    return NearestVertex(Vertex(x, 0), y / config.defaultSpeed, Direction.down)
+                }
+                return NearestVertex(Vertex(config.xCellsCount * config.squareWith, y), (config.xCellsCount * config
+                        .squareWith - x) / config.defaultSpeed, Direction.right)
+            }
+        }
+    }
+
+    private fun getRandom(commands: Array<String>): String {
+        val rnd = Random().nextInt(commands.size)
+        return commands[rnd]
+    }
+
+}
+
+data class NearestVertex(val vertex: Vertex, val steps: Int, val direction: Direction)
 
 data class TickData(val enemies: ArrayList<PlayerTickData>, val me: PlayerTickData, val tickNum: Int, val bonuses: BonusesList) {
 
@@ -116,8 +218,17 @@ enum class BonusType(val literal: String) {
     NITRO("n"), SLOW("s"), SAW("saw")
 }
 
-enum class Direction() {
+enum class Direction {
     left, up, right, down;
+
+
+    fun isOppositeTo(test: Direction): Boolean {
+        return test == left && this == right ||
+                test == right && this == left ||
+                this == up && test == down ||
+                this == down && test == up
+    }
+
 }
 
 data class VertexList(val vertexes: ArrayList<Vertex>) {
