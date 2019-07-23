@@ -43,7 +43,7 @@ class SimpleStrategy(val config: WorldConfig) {
     private val commands = arrayOf("left", "right", "up", "down")
 
     lateinit var currentTick: TickData
-    private var lastKnownDirection: Direction = Direction.up
+    private lateinit var lastKnownDirection: Direction
     private var goHomeRequired = false
 
     fun onNewTick(tickData: TickData) {
@@ -62,40 +62,54 @@ class SimpleStrategy(val config: WorldConfig) {
         }
 
         val dir = if (abs(currentTick.me.position.x - target.x) > abs(currentTick.me.position.y - target.y)) {
-            if (currentTick.me.position.x > target.x)
+            if (currentTick.me.position.x > target.x) {
                 Direction.down
+            }
             Direction.up
         } else {
-            if (currentTick.me.position.y > target.y)
+            if (currentTick.me.position.y > target.y) {
                 Direction.left
+            }
             Direction.right
         }
 
-        return NearestVertex(target, -1, dir)
+        return NearestVertex(target, (config.yCellsCount *
+                config.squareWith - currentTick.me.position.y) / config.defaultSpeed + (config.xCellsCount *
+                config.squareWith - currentTick.me.position.x) / config.defaultSpeed, dir)
     }
 
 
     fun getCommand(): String {
-        return if (currentTick.tickNum == 1)
-            getRandom(commands.copyOfRange(0, 1))
-        else
-            getNextTurn()
+        return if (currentTick.tickNum == 1) {
+            val r = getRandom(commands.copyOfRange(0, 1))
+            f.appendText("GetCommand 1 $r\n")
+            r
+        } else {
+            val r = getNextTurn()
+            f.appendText("GetCommand $r\n")
+            r
+        }
     }
 
     private fun getNextTurn(): String {
         if (goHomeRequired) {
+            f.appendText("GetNextTurn: home required: $goHomeRequired\n")
             val nearest = getNearestMyTerritoryPoint()
-            if (!lastKnownDirection.isOppositeTo(nearest.direction)) {
-                lastKnownDirection = nearest.direction
+            f.appendText("GetNextTurn: nearest: $nearest\n")
 
+            if (!::lastKnownDirection.isInitialized || !lastKnownDirection.isOppositeTo(nearest.direction)) {
+                lastKnownDirection = nearest.direction
                 return lastKnownDirection.toString()
             }
+
         }
 
         val dir = getNearestBorderDirection()
+        f.appendText("GetNextTurn: nearestBorder: $dir\n")
+
         if (dir.steps > 1) {
             goHomeRequired = false
-            if (!lastKnownDirection.isOppositeTo(dir.direction)) {
+            if (!::lastKnownDirection.isInitialized || !lastKnownDirection.isOppositeTo(dir.direction)) {
                 lastKnownDirection = dir.direction
 
                 return lastKnownDirection.toString()
