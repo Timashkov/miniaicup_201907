@@ -83,7 +83,7 @@ class SimpleStrategy(val config: WorldConfig) {
 
     fun getCommand(): String {
         return if (currentTick.tickNum == 1) {
-            val r = getRandom(commands.copyOfRange(0, 1))
+            val r = Direction.LEFT.literal
             f.appendText("GetCommand 1 $r\n")
             r
         } else {
@@ -120,10 +120,10 @@ class SimpleStrategy(val config: WorldConfig) {
 
         return if (lastKnownDirection == Direction.UP || lastKnownDirection == Direction.DOWN) {
             goHomeRequired = true
-            getRandom(commands.copyOfRange(0, 1))
+            Direction.LEFT.literal
         } else {
             goHomeRequired = true
-            getRandom(commands.copyOfRange(2, 3))
+            Direction.UP.literal
         }
 
     }
@@ -152,10 +152,10 @@ class SimpleStrategy(val config: WorldConfig) {
         }
     }
 
-    private fun getRandom(commands: Array<String>): String {
-        val rnd = Random().nextInt(commands.size)
-        return commands[rnd]
-    }
+//    private fun getRandom(commands: Array<String>): String {
+//        val rnd = Random().nextInt(commands.size)
+//        return commands[rnd]
+//    }
 
 }
 
