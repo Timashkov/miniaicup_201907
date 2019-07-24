@@ -63,19 +63,21 @@ class SimpleStrategy(val config: WorldConfig) {
 
         val dir = if (abs(currentTick.me.position.x - target.x) > abs(currentTick.me.position.y - target.y)) {
             if (currentTick.me.position.x > target.x) {
-                Direction.down
+                Direction.DOWN
             }
-            Direction.up
+            Direction.UP
         } else {
             if (currentTick.me.position.y > target.y) {
-                Direction.left
+                Direction.LEFT
             }
-            Direction.right
+            Direction.RIGHT
         }
 
-        return NearestVertex(target, (config.yCellsCount *
-                config.squareWith - currentTick.me.position.y) / config.defaultSpeed + (config.xCellsCount *
-                config.squareWith - currentTick.me.position.x) / config.defaultSpeed, dir)
+        return NearestVertex(
+            target, (config.yCellsCount *
+                    config.squareWith - currentTick.me.position.y) / config.defaultSpeed + (config.xCellsCount *
+                    config.squareWith - currentTick.me.position.x) / config.defaultSpeed, dir
+        )
     }
 
 
@@ -99,7 +101,7 @@ class SimpleStrategy(val config: WorldConfig) {
 
             if (!::lastKnownDirection.isInitialized || !lastKnownDirection.isOppositeTo(nearest.direction)) {
                 lastKnownDirection = nearest.direction
-                return lastKnownDirection.toString()
+                return lastKnownDirection.literal
             }
 
         }
@@ -112,11 +114,11 @@ class SimpleStrategy(val config: WorldConfig) {
             if (!::lastKnownDirection.isInitialized || !lastKnownDirection.isOppositeTo(dir.direction)) {
                 lastKnownDirection = dir.direction
 
-                return lastKnownDirection.toString()
+                return lastKnownDirection.literal
             }
         }
 
-        return if (lastKnownDirection == Direction.up || lastKnownDirection == Direction.down) {
+        return if (lastKnownDirection == Direction.UP || lastKnownDirection == Direction.DOWN) {
             goHomeRequired = true
             getRandom(commands.copyOfRange(0, 1))
         } else {
@@ -131,18 +133,21 @@ class SimpleStrategy(val config: WorldConfig) {
             if (x >= y) {
                 if (x > config.yCellsCount * config.squareWith - y) {
                     return NearestVertex(
-                            Vertex(x, config.yCellsCount * config.squareWith),
-                            (config.yCellsCount *
-                                    config.squareWith - y) / config.defaultSpeed,
-                            Direction.up)
+                        Vertex(x, config.yCellsCount * config.squareWith),
+                        (config.yCellsCount *
+                                config.squareWith - y) / config.defaultSpeed,
+                        Direction.UP
+                    )
                 }
-                return NearestVertex(Vertex(0, y), x / config.defaultSpeed, Direction.left)
+                return NearestVertex(Vertex(0, y), x / config.defaultSpeed, Direction.LEFT)
             } else {
                 if (config.xCellsCount * config.squareWith - x > y) {
-                    return NearestVertex(Vertex(x, 0), y / config.defaultSpeed, Direction.down)
+                    return NearestVertex(Vertex(x, 0), y / config.defaultSpeed, Direction.DOWN)
                 }
-                return NearestVertex(Vertex(config.xCellsCount * config.squareWith, y), (config.xCellsCount * config
-                        .squareWith - x) / config.defaultSpeed, Direction.right)
+                return NearestVertex(
+                    Vertex(config.xCellsCount * config.squareWith, y), (config.xCellsCount * config
+                        .squareWith - x) / config.defaultSpeed, Direction.RIGHT
+                )
             }
         }
     }
@@ -156,7 +161,12 @@ class SimpleStrategy(val config: WorldConfig) {
 
 data class NearestVertex(val vertex: Vertex, val steps: Int, val direction: Direction)
 
-data class TickData(val enemies: ArrayList<PlayerTickData>, val me: PlayerTickData, val tickNum: Int, val bonuses: BonusesList) {
+data class TickData(
+    val enemies: ArrayList<PlayerTickData>,
+    val me: PlayerTickData,
+    val tickNum: Int,
+    val bonuses: BonusesList
+) {
 
     companion object {
         fun build(line: String): TickData? {
@@ -174,28 +184,44 @@ data class TickData(val enemies: ArrayList<PlayerTickData>, val me: PlayerTickDa
                 }
             }
 
-            return TickData(en, me,
-                    jsTick.getJSONObject("params").getInt("tick_num"),
-                    BonusesList.build(jsTick.getJSONObject("params").getJSONArray("bonuses"))
+            return TickData(
+                en, me,
+                jsTick.getJSONObject("params").getInt("tick_num"),
+                BonusesList.build(jsTick.getJSONObject("params").getJSONArray("bonuses"))
             )
         }
     }
 
 }
 
-data class PlayerTickData(val name: String, val score: Int, val direction: Direction, val territory: VertexList, val
-lines: VertexList,
-                          val position: Vertex, val bonuses: BonusesList) {
+data class PlayerTickData(
+    val name: String,
+    val score: Int,
+    val direction: Direction,
+    val territory: VertexList,
+    val lines: VertexList,
+    val position: Vertex,
+    val bonuses: BonusesList
+) {
     companion object {
-        fun build(name: String, tickData: JSONObject) = PlayerTickData(
+        fun build(name: String, tickData: JSONObject): PlayerTickData {
+            val direction = when (tickData.optString("direction")) {
+                Direction.DOWN.literal -> Direction.DOWN
+                Direction.LEFT.literal -> Direction.LEFT
+                Direction.RIGHT.literal -> Direction.RIGHT
+                Direction.UP.literal -> Direction.UP
+                else -> Direction.NONE
+            }
+            return PlayerTickData(
                 name,
                 tickData.getInt("score"),
-                Direction.valueOf(tickData.getString("direction")),
+                direction,
                 VertexList.build(tickData.getJSONArray("territory")),
                 VertexList.build(tickData.getJSONArray("lines")),
                 Vertex.build(tickData.getJSONArray("position")),
                 BonusesList.build(tickData.getJSONArray("bonuses"))
-        )
+            )
+        }
     }
 }
 
@@ -213,7 +239,11 @@ data class BonusesList(val items: ArrayList<Bonus>) {
     }
 }
 
-data class Bonus(val type: BonusType, var ticks: Int, var position: Vertex) {
+data class Bonus(
+    val type: BonusType,
+    var ticks: Int,
+    var position: Vertex
+) {
     companion object {
         fun build(jsBonus: JSONObject): Bonus {
             val type = when (jsBonus.getString("type")) {
@@ -232,15 +262,16 @@ enum class BonusType(val literal: String) {
     NITRO("n"), SLOW("s"), SAW("saw")
 }
 
-enum class Direction {
-    left, up, right, down;
+enum class Direction(val intDir: Int, val literal: String) {
+    LEFT(1, "left"),
+    UP(2, "up"),
+    RIGHT(3, "right"),
+    DOWN(4, "down"),
+    NONE(100, "null");
 
 
     fun isOppositeTo(test: Direction): Boolean {
-        return test == left && this == right ||
-                test == right && this == left ||
-                this == up && test == down ||
-                this == down && test == up
+        return abs(test.intDir - this.intDir) == 2
     }
 
 }
@@ -271,17 +302,24 @@ data class Vertex(val x: Int, val y: Int) {
     }
 }
 
-data class WorldConfig(val xCellsCount: Int, val yCellsCount: Int, val defaultSpeed: Int, val squareWith: Int) {
+data class WorldConfig(
+    val xCellsCount: Int,
+    val yCellsCount: Int,
+    val defaultSpeed: Int,
+    val squareWith: Int
+) {
     companion object {
         fun build(firstTickData: JSONObject): WorldConfig? {
             if (firstTickData.getString("type") != "start_game") {
                 return null
             }
             val configJson = firstTickData.getJSONObject("params")
-            return WorldConfig(configJson.getInt("x_cells_count"),
-                    configJson.getInt("y_cells_count"),
-                    configJson.getInt("speed"),
-                    configJson.getInt("width"))
+            return WorldConfig(
+                configJson.getInt("x_cells_count"),
+                configJson.getInt("y_cells_count"),
+                configJson.getInt("speed"),
+                configJson.getInt("width")
+            )
         }
     }
 
