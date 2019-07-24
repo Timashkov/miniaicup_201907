@@ -38,7 +38,7 @@ fun main(args: Array<String>) {
     }
 }
 
-class SimpleStrategy(val config: WorldConfig) {
+class SimpleStrategy(private val config: WorldConfig) {
 
     private val commands = arrayOf("left", "right", "up", "down")
 
@@ -109,7 +109,7 @@ class SimpleStrategy(val config: WorldConfig) {
         val dir = getNearestBorderDirection()
         f.appendText("GetNextTurn: nearestBorder: $dir\n")
 
-        if (dir.steps > 1) {
+        if (dir.steps > 0) {
             goHomeRequired = false
             if (!::lastKnownDirection.isInitialized || !lastKnownDirection.isOppositeTo(dir.direction)) {
                 lastKnownDirection = dir.direction
@@ -130,23 +130,21 @@ class SimpleStrategy(val config: WorldConfig) {
 
     private fun getNearestBorderDirection(): NearestVertex {
         with(currentTick.me.position) {
-            if (x >= y) {
-                if (x > config.yCellsCount * config.squareWith - y) {
+            if (x < y) {
+                if (x > config.maxY - y) {
                     return NearestVertex(
-                        Vertex(x, config.yCellsCount * config.squareWith),
-                        (config.yCellsCount *
-                                config.squareWith - y) / config.defaultSpeed,
+                        Vertex(x, config.maxX),
+                        (config.maxY - y) / WorldConfig.STEP_LENGTH,
                         Direction.UP
                     )
                 }
-                return NearestVertex(Vertex(0, y), x / config.defaultSpeed, Direction.LEFT)
+                return NearestVertex(Vertex(config.minX, y), x / WorldConfig.STEP_LENGTH, Direction.LEFT)
             } else {
-                if (config.xCellsCount * config.squareWith - x > y) {
-                    return NearestVertex(Vertex(x, 0), y / config.defaultSpeed, Direction.DOWN)
+                if (config.maxX - x > y) {
+                    return NearestVertex(Vertex(x, config.minY), y / WorldConfig.STEP_LENGTH, Direction.DOWN)
                 }
                 return NearestVertex(
-                    Vertex(config.xCellsCount * config.squareWith, y), (config.xCellsCount * config
-                        .squareWith - x) / config.defaultSpeed, Direction.RIGHT
+                    Vertex(config.maxX, y), (config.maxX - x) / WorldConfig.STEP_LENGTH, Direction.RIGHT
                 )
             }
         }
@@ -309,6 +307,9 @@ data class WorldConfig(
     val squareWith: Int
 ) {
     companion object {
+
+        const val STEP_LENGTH = 30
+
         fun build(firstTickData: JSONObject): WorldConfig? {
             if (firstTickData.getString("type") != "start_game") {
                 return null
@@ -323,7 +324,15 @@ data class WorldConfig(
         }
     }
 
+    val mapWidth = xCellsCount * squareWith
+    val mapHeight = yCellsCount * squareWith
+    val maxX = mapWidth - STEP_LENGTH / 2
+    val maxY = mapHeight - STEP_LENGTH / 2
+    val minX = STEP_LENGTH / 2
+    val minY = STEP_LENGTH / 2
+
+
     override fun toString(): String {
-        return "xCells: $xCellsCount, yCells: $yCellsCount, defaultSpeed: $defaultSpeed, width: $squareWith"
+        return "xCells: $xCellsCount, yCells: $yCellsCount, defaultSpeed: $defaultSpeed, width: $squareWith; Nested: map $mapWidth x $mapHeight"
     }
 }
