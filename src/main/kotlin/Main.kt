@@ -61,22 +61,25 @@ class SimpleStrategy(private val config: WorldConfig) {
             }
         }
 
-        val dir = if (abs(currentTick.me.position.x - target.x) > abs(currentTick.me.position.y - target.y)) {
-            if (currentTick.me.position.x > target.x) {
-                Direction.DOWN
-            }
-            Direction.UP
-        } else {
-            if (currentTick.me.position.y > target.y) {
+        val dir = if (abs(currentTick.myX - target.x) > abs(currentTick.myY - target.y)) {
+            if (currentTick.myX > target.x) {
                 Direction.LEFT
+            } else {
+                Direction.RIGHT
             }
-            Direction.RIGHT
+        } else {
+            if (currentTick.myY > target.y) {
+                Direction.DOWN
+            } else {
+                Direction.UP
+            }
         }
 
         return NearestVertex(
-            target, (config.yCellsCount *
-                    config.squareWith - currentTick.me.position.y) / config.defaultSpeed + (config.xCellsCount *
-                    config.squareWith - currentTick.me.position.x) / config.defaultSpeed, dir
+                target,
+                abs(target.y - currentTick.myY) / WorldConfig.STEP_LENGTH +
+                        abs(target.x - currentTick.myX) / WorldConfig.STEP_LENGTH,
+                dir
         )
     }
 
@@ -99,7 +102,11 @@ class SimpleStrategy(private val config: WorldConfig) {
             val nearest = getNearestMyTerritoryPoint()
             f.appendText("GetNextTurn: nearest: $nearest\n")
 
-            if (!::lastKnownDirection.isInitialized || !lastKnownDirection.isOppositeTo(nearest.direction)) {
+            goHomeRequired = nearest.steps > 0
+
+            if (nearest.steps > 0 &&
+                    (!::lastKnownDirection.isInitialized ||
+                            !lastKnownDirection.isOppositeTo(nearest.direction))) {
                 lastKnownDirection = nearest.direction
                 return lastKnownDirection.literal
             }
@@ -118,35 +125,104 @@ class SimpleStrategy(private val config: WorldConfig) {
             }
         }
 
-        return if (lastKnownDirection == Direction.UP || lastKnownDirection == Direction.DOWN) {
-            goHomeRequired = true
-            Direction.LEFT.literal
-        } else {
-            goHomeRequired = true
-            Direction.UP.literal
+        goHomeRequired = true
+        val nearest = getNearestMyTerritoryPoint()
+        if (nearest.steps > 0) {
+
+            if (!lastKnownDirection.isOppositeTo(nearest.direction)) {
+                lastKnownDirection = nearest.direction
+                return lastKnownDirection.literal
+            }
+
+            if (lastKnownDirection.vertical) {
+                if (currentTick.me.territory.vertexes.any { it.x > nearest.vertex.x }) {
+                    lastKnownDirection = Direction.RIGHT
+                    return lastKnownDirection.literal
+                }
+                if (currentTick.me.territory.vertexes.any { it.x < nearest.vertex.x }) {
+                    lastKnownDirection = Direction.LEFT
+                    return lastKnownDirection.literal
+                }
+            }
+
+            if (lastKnownDirection.horizontal) {
+                if (currentTick.me.territory.vertexes.any { it.y > nearest.vertex.y }) {
+                    lastKnownDirection = Direction.UP
+                    return lastKnownDirection.literal
+                }
+                if (currentTick.me.territory.vertexes.any { it.y < nearest.vertex.y }) {
+                    lastKnownDirection = Direction.DOWN
+                    return lastKnownDirection.literal
+                }
+            }
+
         }
 
+        if (lastKnownDirection.vertical) {
+            goHomeRequired = true
+            lastKnownDirection = Direction.LEFT
+        } else {
+            goHomeRequired = true
+            lastKnownDirection = Direction.UP
+        }
+        return lastKnownDirection.literal
     }
 
     private fun getNearestBorderDirection(): NearestVertex {
         with(currentTick.me.position) {
-            if (x < y) {
-                if (x > config.maxY - y) {
+
+            if (x == config.minX || x == config.maxX) {
+                return if (y > config.maxY - y) {
+                    NearestVertex(
+                            Vertex(x, config.maxY),
+                            (config.maxY - y) / WorldConfig.STEP_LENGTH,
+                            Direction.UP
+                    )
+                } else {
+                    NearestVertex(
+                            Vertex(x, config.minY),
+                            (config.minY - y) / WorldConfig.STEP_LENGTH,
+                            Direction.DOWN
+                    )
+                }
+            }
+
+            if (y == config.minY || y == config.maxY) {
+                return if (x > config.maxX - x) {
+                    NearestVertex(
+                            Vertex(config.maxX, y),
+                            (config.maxX - x) / WorldConfig.STEP_LENGTH,
+                            Direction.RIGHT
+                    )
+                } else {
+                    NearestVertex(
+                            Vertex(config.minX, y),
+                            (config.minX - x) / WorldConfig.STEP_LENGTH,
+                            Direction.LEFT
+                    )
+                }
+            }
+
+            if (x < y && x > config.minX) {
+                if (x > config.maxY - y && y < config.maxY) {
                     return NearestVertex(
-                        Vertex(x, config.maxX),
-                        (config.maxY - y) / WorldConfig.STEP_LENGTH,
-                        Direction.UP
+                            Vertex(x, config.maxY),
+                            (config.maxY - y) / WorldConfig.STEP_LENGTH,
+                            Direction.UP
                     )
                 }
                 return NearestVertex(Vertex(config.minX, y), x / WorldConfig.STEP_LENGTH, Direction.LEFT)
             } else {
-                if (config.maxX - x > y) {
+                if (config.maxX - x > y && y > config.minY) {
                     return NearestVertex(Vertex(x, config.minY), y / WorldConfig.STEP_LENGTH, Direction.DOWN)
                 }
+
                 return NearestVertex(
-                    Vertex(config.maxX, y), (config.maxX - x) / WorldConfig.STEP_LENGTH, Direction.RIGHT
+                        Vertex(config.maxX, y), (config.maxX - x) / WorldConfig.STEP_LENGTH, Direction.RIGHT
                 )
+
             }
+
         }
     }
 
@@ -160,10 +236,10 @@ class SimpleStrategy(private val config: WorldConfig) {
 data class NearestVertex(val vertex: Vertex, val steps: Int, val direction: Direction)
 
 data class TickData(
-    val enemies: ArrayList<PlayerTickData>,
-    val me: PlayerTickData,
-    val tickNum: Int,
-    val bonuses: BonusesList
+        val enemies: ArrayList<PlayerTickData>,
+        val me: PlayerTickData,
+        val tickNum: Int,
+        val bonuses: BonusesList
 ) {
 
     companion object {
@@ -183,23 +259,27 @@ data class TickData(
             }
 
             return TickData(
-                en, me,
-                jsTick.getJSONObject("params").getInt("tick_num"),
-                BonusesList.build(jsTick.getJSONObject("params").getJSONArray("bonuses"))
+                    en, me,
+                    jsTick.getJSONObject("params").getInt("tick_num"),
+                    BonusesList.build(jsTick.getJSONObject("params").getJSONArray("bonuses"))
             )
         }
     }
 
+    val myX
+        get() = me.position.x
+    val myY
+        get() = me.position.y
 }
 
 data class PlayerTickData(
-    val name: String,
-    val score: Int,
-    val direction: Direction,
-    val territory: VertexList,
-    val lines: VertexList,
-    val position: Vertex,
-    val bonuses: BonusesList
+        val name: String,
+        val score: Int,
+        val direction: Direction,
+        val territory: VertexList,
+        val lines: VertexList,
+        val position: Vertex,
+        val bonuses: BonusesList
 ) {
     companion object {
         fun build(name: String, tickData: JSONObject): PlayerTickData {
@@ -211,13 +291,13 @@ data class PlayerTickData(
                 else -> Direction.NONE
             }
             return PlayerTickData(
-                name,
-                tickData.getInt("score"),
-                direction,
-                VertexList.build(tickData.getJSONArray("territory")),
-                VertexList.build(tickData.getJSONArray("lines")),
-                Vertex.build(tickData.getJSONArray("position")),
-                BonusesList.build(tickData.getJSONArray("bonuses"))
+                    name,
+                    tickData.getInt("score"),
+                    direction,
+                    VertexList.build(tickData.getJSONArray("territory")),
+                    VertexList.build(tickData.getJSONArray("lines")),
+                    Vertex.build(tickData.getJSONArray("position")),
+                    BonusesList.build(tickData.getJSONArray("bonuses"))
             )
         }
     }
@@ -238,9 +318,9 @@ data class BonusesList(val items: ArrayList<Bonus>) {
 }
 
 data class Bonus(
-    val type: BonusType,
-    var ticks: Int,
-    var position: Vertex
+        val type: BonusType,
+        var ticks: Int,
+        var position: Vertex
 ) {
     companion object {
         fun build(jsBonus: JSONObject): Bonus {
@@ -261,6 +341,8 @@ enum class BonusType(val literal: String) {
 }
 
 enum class Direction(val intDir: Int, val literal: String) {
+
+
     LEFT(1, "left"),
     UP(2, "up"),
     RIGHT(3, "right"),
@@ -271,6 +353,12 @@ enum class Direction(val intDir: Int, val literal: String) {
     fun isOppositeTo(test: Direction): Boolean {
         return abs(test.intDir - this.intDir) == 2
     }
+
+    val vertical: Boolean
+        get() = this == UP || this == DOWN
+
+    val horizontal: Boolean
+        get() = this == LEFT || this == RIGHT
 
 }
 
@@ -301,10 +389,10 @@ data class Vertex(val x: Int, val y: Int) {
 }
 
 data class WorldConfig(
-    val xCellsCount: Int,
-    val yCellsCount: Int,
-    val defaultSpeed: Int,
-    val squareWith: Int
+        val xCellsCount: Int,
+        val yCellsCount: Int,
+        val defaultSpeed: Int,
+        val squareWith: Int
 ) {
     companion object {
 
@@ -316,10 +404,10 @@ data class WorldConfig(
             }
             val configJson = firstTickData.getJSONObject("params")
             return WorldConfig(
-                configJson.getInt("x_cells_count"),
-                configJson.getInt("y_cells_count"),
-                configJson.getInt("speed"),
-                configJson.getInt("width")
+                    configJson.getInt("x_cells_count"),
+                    configJson.getInt("y_cells_count"),
+                    configJson.getInt("speed"),
+                    configJson.getInt("width")
             )
         }
     }
